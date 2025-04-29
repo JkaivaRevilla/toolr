@@ -1,0 +1,79 @@
+# ---------------------------
+# 1. Cargar librerías necesarias
+# ---------------------------
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(pROC)
+library(dplyr)
+
+# ---------------------------
+# 2. Cargar el dataset
+# ---------------------------
+data("GermanCredit")  # Viene en caret
+str(GermanCredit$Class)  # Clase objetivo: 'Bad' o 'Good'
+
+# Crear una variable binaria 0 (Good) y 1 (Bad)
+GermanCredit$credit_risk <- ifelse(GermanCredit$Class == "Bad", 1, 0)
+GermanCredit$credit_risk <- factor(GermanCredit$credit_risk, levels = c(0, 1))
+
+# ---------------------------
+# 3. Separar en train y test
+# ---------------------------
+set.seed(123)
+train_index <- createDataPartition(GermanCredit$credit_risk, p = 0.7, list = FALSE)
+train <- GermanCredit[train_index, ]
+test <- GermanCredit[-train_index, ]
+
+# ---------------------------
+# 4. Modelo de árbol de decisión
+# ---------------------------
+modelo_arbol <- rpart(credit_risk ~ . - Class, data = train, method = "class")
+rpart.plot(modelo_arbol)
+
+# Predicción (probabilidades)
+pred_arbol_prob <- predict(modelo_arbol, test, type = "prob")[, 2]
+
+# Predicción (clases)
+pred_arbol_class <- predict(modelo_arbol, test, type = "class")
+
+# Matriz de confusión
+conf_matrix_arbol <- confusionMatrix(pred_arbol_class, test$credit_risk)
+print(conf_matrix_arbol)
+
+# Curva ROC y AUC
+roc_arbol <- roc(response = test$credit_risk, predictor = pred_arbol_prob)
+auc_arbol <- auc(roc_arbol)
+print(paste("AUC Árbol:", round(auc_arbol, 4)))
+
+# ---------------------------
+# 5. Modelo de regresión logística
+# ---------------------------
+modelo_logit <- glm(credit_risk ~ . - Class, data = train, family = "binomial")
+summary(modelo_logit)
+
+# Predicción (probabilidades)
+pred_logit_prob <- predict(modelo_logit, test, type = "response")
+
+# Clasificación basada en umbral 0.5
+pred_logit_class <- factor(ifelse(pred_logit_prob > 0.5, 1, 0), levels = c(0, 1))
+
+# Matriz de confusión
+conf_matrix_logit <- confusionMatrix(pred_logit_class, test$credit_risk)
+print(conf_matrix_logit)
+
+# Curva ROC y AUC
+roc_logit <- roc(response = test$credit_risk, predictor = pred_logit_prob)
+auc_logit <- auc(roc_logit)
+print(paste("AUC Logística:", round(auc_logit, 4)))
+
+# ---------------------------
+# 6. Comparar gráficamente las curvas ROC
+# ---------------------------
+plot(roc_arbol, col = "blue", lwd = 2, main = "Curvas ROC: Árbol vs Logística")
+plot(roc_logit, col = "red", lwd = 2, add = TRUE)
+legend("bottomright",
+       legend = c(paste("Árbol (AUC =", round(auc_arbol, 3), ")"),
+                  paste("Logística (AUC =", round(auc_logit, 3), ")")),
+       col = c("blue", "red"),
+       lwd = 2)
